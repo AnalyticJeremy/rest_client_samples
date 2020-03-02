@@ -1,0 +1,55 @@
+# Using the "REST Client" extension for VS Code to make authorized calls to the
+# Azure REST API's.  In this example, we will list the available servers in
+# Azure Analysis Services... but it can be easily adapted for any other Azure
+# management API
+#
+# The Extension:  https://marketplace.visualstudio.com/items?itemName=humao.rest-client
+#   Source/Docs:  https://github.com/Huachao/vscode-restclient
+
+
+# Declare file-level variables
+@subscriptionId = <put your Azure subscription ID here (a guid)>
+@tenantId = <put your AAD tenant ID here (a guid)>
+@clientId = <put your client ID here (a guid)>
+@clientSecret = <put your secret here (random string, probably 32 characters)>
+
+###
+
+# Interactive Login:  Using the "aadToken" system variable, the "REST Client"
+# extension will handle the connection to Azure AAD and use dialog boxes in
+# VS Code to guide you through the process of logging in via your web browser.
+# The token obtained will be cached so it can be used for subsequent API calls.
+
+GET https://management.azure.com/subscriptions/{{subscriptionId}}/providers/Microsoft.AnalysisServices/servers?api-version=2017-08-01 HTTP/1.1
+Authorization: {{$aadToken aud:{{clientId}}}}
+
+# More documentation on the "aadToken" system variable can be found at:
+# https://github.com/Huachao/vscode-restclient/wiki/Azure-Active-Directory-Authentication-Samples
+
+
+###
+
+
+# Maybe you don't want to connect to AAD interactively.  Maybe you want to use
+# a client ID and client secret instead.  The "REST Client" extension does not
+# seem to support this natively. (yet?)  But we can call the OAuth2 endpoint
+# and save the token in a variable.  It just takes an extra step.
+
+# Step 1:  Call OAuth endpoint and send our client ID and secret
+
+# @name myOauthLogin
+POST https://login.microsoftonline.com/{{tenantId}}/oauth2/v2.0/token HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+client_id={{clientId}}&client_secret={{clientSecret}}&grant_type=client_credentials&scope=https://management.azure.com/.default
+
+###
+
+# Step 2:  Use the token that we received in the HTTP response from above
+# as our bearer token.  When the token expires, just get a fresh one by
+# repeating Step 1.
+
+@authToken = {{myOauthLogin.response.body.$.access_token}}
+
+GET https://management.azure.com/subscriptions/{{subscriptionId}}/providers/Microsoft.AnalysisServices/servers?api-version=2017-08-01 HTTP/1.1
+Authorization: Bearer {{authToken}}
